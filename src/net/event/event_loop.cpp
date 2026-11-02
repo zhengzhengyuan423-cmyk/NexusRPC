@@ -69,6 +69,10 @@ void EventLoop::Start()
         }
         RunAllTask();
     }
+    // 停机排空：ShutdownInLoop→ReleaseInLoop 是两跳任务链，第二跳排入时 _running 已假。
+    // 不排空则 fd 不关、FIN 不发，对端只能干等超时
+    while (HasPendingTask())
+        RunAllTask();
 }
 
 void EventLoop::Stop()

@@ -1,5 +1,5 @@
 #include "net/conn/buffer.hpp"
-#include "net/logger.hpp"
+#include "logger.hpp"
 
 namespace nexus {
 

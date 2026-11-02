@@ -50,6 +50,18 @@ public:
         }
         // join 完成后 _owned 随本对象析构 loop
     }
+    // 等 loop 线程退出（Start 已返回）。对象析构前调，确保排空回调跑完时宿主还活着。
+    // 必须先 Stop：Start 只有看到 _running 为假才返回，光 join 会死等
+    void Join()
+    {
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            if (_loop)
+                _loop->Stop();
+        }
+        if (_thread.joinable())
+            _thread.join();
+    }
     // 阻塞直到 worker 线程发布 loop 指针；返回的指针在本对象存活期内有效
     EventLoop *GetLoop()
     {

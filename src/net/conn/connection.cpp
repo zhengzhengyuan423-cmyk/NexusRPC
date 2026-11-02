@@ -32,7 +32,10 @@ void Connection::HandleRead()
     if (_in_buffer.ReadableSize() > 0)
     {
         _loop->GetMetrics().OnRequest();
-        return _message_callback(shared_from_this(), &_in_buffer);
+        // 未设回调=吞掉，不炸 loop
+        if (_message_callback)
+            _message_callback(shared_from_this(), &_in_buffer);
+        return;
     }
 }
 
@@ -61,7 +64,8 @@ void Connection::HandleClose()
     // 挂断前先把手里的残留数据过一遍，不丢请求
     if (_in_buffer.ReadableSize() > 0)
     {
-        _message_callback(shared_from_this(), &_in_buffer);
+        if (_message_callback)
+            _message_callback(shared_from_this(), &_in_buffer);
     }
     return Release();
 }
@@ -178,8 +182,9 @@ void Connection::Shutdown()
 
 void Connection::Release()
 {
-    // QueueInLoop 而非 RunInLoop：释放必须排在当前回调栈之后
-    _loop->QueueInLoop(std::bind(&Connection::ReleaseInLoop, this));
+    // QueueInLoop 而非 RunInLoop：释放必须排在当前回调栈之后。
+    // 任务携带强引用：排队期间对象不许被别的线程拆掉，否则排空的 ReleaseInLoop 踩到死对象
+    _loop->QueueInLoop([self = shared_from_this()]() { self->ReleaseInLoop(); });
 }
 
 void Connection::SetIdleTimeout(int sec)

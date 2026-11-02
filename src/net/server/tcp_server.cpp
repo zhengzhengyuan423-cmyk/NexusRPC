@@ -120,6 +120,9 @@ void TcpServer::Start()
 
 void TcpServer::Shutdown()
 {
+    if (_shutdown_done)
+        return; // 重复 Stop 只生效一次
+    _shutdown_done = true;
     ILOG << "Shutdown: stop accepting...";
     if (_signal_channel)
     {

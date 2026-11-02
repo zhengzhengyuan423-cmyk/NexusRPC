@@ -5,7 +5,7 @@
 #include "net/conn/buffer.hpp"
 #include "net/event/channel.hpp"
 #include "net/event/event_loop.hpp"
-#include "net/logger.hpp"
+#include "logger.hpp"
 
 namespace nexus {
 

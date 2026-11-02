@@ -13,7 +13,7 @@
 #include <sys/timerfd.h>
 #include "net/event/poller.hpp"
 #include "net/event/channel.hpp"
-#include "net/logger.hpp"
+#include "logger.hpp"
 
 namespace nexus {
 
@@ -279,6 +279,11 @@ public:
     void RunInLoop(const TaskFunc &cb);
     // 永远入队（供 Release 这类"必然后置"的操作使用）
     void QueueInLoop(const TaskFunc &cb);
+    bool HasPendingTask()
+    {
+        std::lock_guard<std::mutex> lk(_mutex);
+        return !_tasks.empty();
+    }
     void UpdateEvent(Channel *channel) { _poller.UpdateEvent(channel); }
     void RemoveEvent(Channel *channel) { _poller.RemoveEvent(channel); }
     void TimerAdd(uint64_t id, uint32_t delay, const TaskFunc &cb) { _timer_wheel.TimerAdd(id, delay, cb); }

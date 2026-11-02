@@ -8,7 +8,7 @@
 #include "net/event/event_loop.hpp"
 #include "net/server/loop_thread.hpp"
 #include "net/server/biz_thread.hpp"
-#include "net/logger.hpp"
+#include "logger.hpp"
 
 namespace nexus {
 
@@ -21,6 +21,7 @@ private:
     int _port;
     int _timeout;            // 空闲超时秒数
     bool _idle_release;      // 是否启用空闲超时释放
+    bool _shutdown_done = false; // Shutdown 只执行一次（仅 baseloop 线程读写）
     EventLoop _baseloop;     // 主循环：监听 accept
     Acceptor _acceptor;
     LoopThreadPool _pool;    // 从属 EventLoop 线程池
@@ -74,6 +75,18 @@ public:
     void RunAfter(const Functor &task, int delay)
     {
         _baseloop.RunInLoop(std::bind(&TcpServer::RunAfterInLoop, this, task, delay));
+    }
+    // 指定 id 的定时器：任意线程安全，TimerAdd 内部即投递
+    void TimerAdd(uint64_t id, int sec, const Functor &task) { _baseloop.TimerAdd(id, sec, task); }
+    void TimerCancel(uint64_t id) { _baseloop.TimerCancel(id); }
+    // 把某连接的清理任务排在该连接已投递任务之后：biz>0 走同连接队列（FIFO），
+    // biz=0 就地执行（io loop 本来串行）
+    void PostConnCleanup(uint64_t conn_id, const Functor &task)
+    {
+        if (_biz_threads > 0)
+            _biz_pool.Post(conn_id, task);
+        else
+            task();
     }
     // 监听 SIGINT/SIGTERM：信号被屏蔽后走 signalfd 进 baseloop，
     // 收到即在 loop 线程执行 Shutdown()——不在信号上下文里做任何非异步安全的事
