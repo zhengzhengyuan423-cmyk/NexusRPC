@@ -3,8 +3,8 @@
 #include <thread>
 #include "net/conn/socket.hpp"
 #include "registry/registry_server.hpp"
-#include "service/consumer.hpp"
-#include "service/provider.hpp"
+#include "entry/consumer.hpp"
+#include "entry/provider.hpp"
 
 using namespace std::chrono;
 using namespace nexus;
@@ -66,7 +66,7 @@ private:
     std::thread _th;
 };
 
-TEST(Service, DiscoverAndCall)
+TEST(Entry, DiscoverAndCall)
 {
     LiveRegistry reg(19880);
     reg.Start();
@@ -87,7 +87,7 @@ TEST(Service, DiscoverAndCall)
     p.Stop();
 }
 
-TEST(Service, RoundRobinHitsBoth)
+TEST(Entry,RoundRobinHitsBoth)
 {
     LiveRegistry reg(19882);
     reg.Start();
@@ -112,7 +112,7 @@ TEST(Service, RoundRobinHitsBoth)
     p1.Stop();
 }
 
-TEST(Service, DeadProviderEvicted)
+TEST(Entry, DeadProviderEvicted)
 {
     LiveRegistry reg(19885);
     reg.Start();
