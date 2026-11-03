@@ -17,11 +17,11 @@ public:
 
     virtual ~INet() = default;
 
-    // Start/Connect 之前注册。未设 on_message = 进线字节吞掉。
+    // Start/Connect 之前注册。
     // 回调在 net 线程执行：不许长阻塞，重活自己开线程
     virtual void SetOnMessage(BytesFn fn) = 0;
     virtual void SetOnClose(CloseFn fn) = 0;
-    // 建链事件：先于该 conn 的首条 on_message。未注册=丢弃
+    // 先于该 conn 的首条 on_message。
     virtual void SetOnConnect(ConnFn fn) = 0;
 
     // data 由 net 层内部拷贝，调用完立即可回收
@@ -34,7 +34,7 @@ public:
     virtual void CancelTimer(uint64_t timer_id) = 0;
 };
 
-// 调优旋钮不是接口行为，改数值不改变契约语义
+// 调优旋钮
 struct NetOptions
 {
     int io_threads = 1;        // 从 loop 数；0 = base loop 亲自管连接

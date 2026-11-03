@@ -22,8 +22,7 @@ enum ConnState
 
 using PtrConnection = std::shared_ptr<Connection>;
 
-// 一条 TCP 连接：fd+双缓冲+事件管理。全部内务方法在属主 loop 线程执行，
-// 公共接口是"壳投递"，任意线程可调（_loop 构造时焊死，连接终生不换线程）
+// 一条 TCP 连接：fd+双缓冲+事件管理。全部内务方法在属主 loop 线程执行，公共接口是"壳投递"，任意线程可调
 class Connection : public std::enable_shared_from_this<Connection>
 {
 private:
@@ -68,6 +67,7 @@ public:
     int Fd() { return _socket.Fd(); }
     uint64_t Id() { return _conn_id; }
     bool Connected() { return (_statu == CONNECTED); }
+    bool Dead() { return (_statu == DISCONNECTED || _statu == DISCONNECTING); }
     void SetConnectedCallback(const ConnectedCallback &cb) { _connected_callback = cb; }
     void SetMessageCallback(const MessageCallback &cb) { _message_callback = cb; }
     void SetClosedCallback(const ClosedCallback &cb) { _closed_callback = cb; }

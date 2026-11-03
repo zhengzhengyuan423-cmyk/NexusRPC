@@ -45,6 +45,8 @@ public:
     void SetAcceptCallback(const AcceptCallback &cb) { _accept_callback = cb; }
     // 必须在设好回调之后启动监控：先启动则事件先到、回调未设，新连接白丢
     void Listen() { _channel.EnableRead(); }
+    // 关停必须真关 fd：只摘 epoll 监控，内核照样完成握手堆 backlog
+    void CloseListen() { _socket.Close(); }
     Channel *GetChannel() { return &_channel; }
 };
 

@@ -78,10 +78,10 @@ TEST(Requestor, ThreeWays)
         ASSERT_TRUE(cli.Connect());
         RCode code;
         Json::Value result;
-        ASSERT_TRUE(cli.Call("Add", AB(3, 4), 5, code, result));
+        ASSERT_TRUE(cli.Call("Add", AB(3, 4), code, result));
         EXPECT_EQ(code, RCode::RCODE_OK);
         EXPECT_EQ(result.asInt(), 7);
-        ASSERT_TRUE(cli.Call("Sub", AB(10, 3), 5, code, result));
+        ASSERT_TRUE(cli.Call("Sub", AB(10, 3), code, result));
         EXPECT_EQ(result.asInt(), 7); // 同一 Requestor 连发两单：rid 各配各的回执
     }
     {
@@ -110,8 +110,7 @@ TEST(Requestor, ThreeWays)
                                  std::lock_guard<std::mutex> lk(m);
                                  got = msg ? std::dynamic_pointer_cast<RpcResponse>(msg)->Result().asInt() : -99;
                                  cv.notify_one();
-                             },
-                             5));
+                             }));
         {
             std::unique_lock<std::mutex> lk(m);
             ASSERT_TRUE(cv.wait_for(lk, seconds(5), [&] { return got != -1; }));
@@ -120,50 +119,7 @@ TEST(Requestor, ThreeWays)
     }
 }
 
-// 沉默服务器：收下字节但慢回话。超时先摘表返回 false；迟到回包查无此 rid 静默丢；
-// 下一单换 rid 正常走完
-TEST(Requestor, TimeoutDropsAndLateDiscarded)
-{
-    int port = 19884;
-    TcpServer srv(port);
-    srv.SetMessageCallback([&srv](const PtrConnection &c, std::string data)
-                           {
-                               Buffer b;
-                               b.WriteStringAndPush(data);
-                               uint32_t mt;
-                               std::string rid, body;
-                               if (PeekFrame(b) == FrameState::GOOD && ParseFrame(b, mt, rid, body))
-                               {
-                                   std::this_thread::sleep_for(milliseconds(1500)); // 永远比 1s 超时晚
-                                   RpcResponse rsp;
-                                   rsp.SetRCode(RCode::RCODE_OK);
-                                   rsp.SetResult(99);
-                                   std::string wire = Encode((uint32_t)MType::RSP_RPC, rid, rsp.Serialize());
-                                   c->Send(wire.c_str(), wire.size());
-                               }
-                           });
-    std::thread th([&] { srv.Start(); });
-    WaitListenReady(port);
-
-    RpcClient cli("127.0.0.1", (uint16_t)port);
-    ASSERT_TRUE(cli.Connect());
-    RCode code;
-    Json::Value result;
-    auto t0 = steady_clock::now();
-    EXPECT_FALSE(cli.Call("Add", AB(1, 1), 1, code, result));
-    auto spent = duration_cast<milliseconds>(steady_clock::now() - t0).count();
-    EXPECT_GE(spent, 900);  // 没提前跑
-    EXPECT_LE(spent, 3000); // 真在超时点脱身，不是挂死
-    // 迟到回包此刻到达：表已摘，静默丢，不崩不二次兑现
-    ASSERT_TRUE(cli.Call("Add", AB(2, 2), 5, code, result));
-    EXPECT_EQ(code, RCode::RCODE_OK);
-    EXPECT_EQ(result.asInt(), 99);
-
-    srv.RunAfter([&srv] { srv.Shutdown(); }, 1); // 裸 TcpServer 的收摊路径
-    th.join();
-}
-
-// 只收不发的服务器：pending 没人兑现，断线清算必须唤醒 30s 的等待者
+// 只收不发的服务器：pending 没人兑现，断线清算必须唤醒等待者
 TEST(Requestor, DisconnectWakesPendingWaiter)
 {
     int port = 19886;
@@ -178,7 +134,7 @@ TEST(Requestor, DisconnectWakesPendingWaiter)
                        {
                            RCode code;
                            Json::Value result;
-                           outcome = cli.Call("Add", AB(1, 1), 30, code, result);
+                           outcome = cli.Call("Add", AB(1, 1), code, result);
                            returned = true;
                        });
     std::this_thread::sleep_for(milliseconds(300));

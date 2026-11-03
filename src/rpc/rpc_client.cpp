@@ -57,12 +57,12 @@ bool RpcClient::OnFrame(uint64_t, uint32_t mtype,
     return true;
 }
 
-bool RpcClient::Call(const std::string &method, const Json::Value &params, int timeout_sec,
+bool RpcClient::Call(const std::string &method, const Json::Value &params,
                      RCode &code, Json::Value &result)
 {
     std::string rid = _requestor->NextRid();
     Message::ptr rsp;
-    if (!_requestor->Send(_net.Id(), BuildRequest(method, params, rid), rid, timeout_sec, rsp))
+    if (!_requestor->Send(_net.Id(), BuildRequest(method, params, rid), rid, rsp))
         return false;
     RpcResponse::ptr typed = std::dynamic_pointer_cast<RpcResponse>(rsp);
     if (!typed)
@@ -80,11 +80,11 @@ bool RpcClient::Call(const std::string &method, const Json::Value &params,
 }
 
 bool RpcClient::Call(const std::string &method, const Json::Value &params,
-                     const Requestor::Callback &cb, int timeout_sec)
+                     const Requestor::Callback &cb)
 {
     std::string rid = _requestor->NextRid();
-    return _requestor->Send(_net.Id(), BuildRequest(method, params, rid), rid, cb, timeout_sec);
+    return _requestor->Send(_net.Id(), BuildRequest(method, params, rid), rid, cb);
 }
 
-} // namespace rpc
+} 
 }

@@ -9,6 +9,9 @@ enum class MType
 {
     REQ_RPC = 0,
     RSP_RPC,
+    REQ_REG,  
+    RSP_REG,
+    PUSH_REG, 
 };
 
 enum class RCode
@@ -53,6 +56,11 @@ namespace key
     inline constexpr char PARAMS[] = "parameters";
     inline constexpr char RCODE[] = "rcode";
     inline constexpr char RESULT[] = "result";
-} 
+    inline constexpr char OP[] = "op";
+    inline constexpr char SERVICE[] = "service";
+    inline constexpr char INSTANCE[] = "instance";
+    inline constexpr char DATA[] = "data";
+    inline constexpr char ADDED[] = "added";
+}
 
 }

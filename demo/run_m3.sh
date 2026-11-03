@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# M3 验收：跨进程 Add/Sub，同步/future/回调三链路
+# 跨进程 Add/Sub，同步/future/回调三链路
 set -u
 BIN="$(cd "$(dirname "$0")/.." && pwd)/build"
 PORT=${PORT:-19890}

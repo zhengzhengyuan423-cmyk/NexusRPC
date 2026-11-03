@@ -30,8 +30,7 @@ void TcpServer::NewConnection(int fd)
 
     _next_id++;
     PtrConnection conn(new Connection(_pool.NextLoop(), _next_id, fd));
-    // 蓝本 Connection 的回调是 io loop 内的 Buffer*，对外 string 签名在这里适配：
-    // 在 io loop 里把 Buffer 拷成 string，之后或就地执行业务、或投递 biz 队列
+
     MessageCallback user_cb = _message_callback;
     if (_biz_threads > 0)
     {
@@ -131,6 +130,7 @@ void TcpServer::Shutdown()
     }
     _acceptor.GetChannel()->DisableAll();
     _acceptor.GetChannel()->Remove();
+    _acceptor.CloseListen();
 
     ILOG << "Shutdown: closing " << _conns.size() << " connections...";
     // 拷贝一份再遍历：Release 会触发 RemoveConnection 改 _conns

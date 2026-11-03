@@ -47,36 +47,25 @@ void Requestor::Fulfill(const DescribePtr &rd, Message::ptr &rsp)
             rd->cb(rsp);
         return;
     }
-    try
-    {
-        rd->promise.set_value(rsp);
-    }
-    catch (const std::future_error &)
-    {
-        // 已被兑现（超时摘表与回包竞争的残余窗口）：静默
-    }
+    rd->promise.set_value(rsp);
 }
 
 bool Requestor::Send(uint64_t conn_id, const std::string &wire, const std::string &rid,
-                     int timeout_sec, Message::ptr &rsp)
+                     Message::ptr &rsp)
 {
     auto rd = Register(rid, Way::SYNC, nullptr);
     if (!rd)
         return false;
     if (!_net.Send(conn_id, wire))
     {
-        DropIfStill(rid, rd); // C3：链路不在，就地撤登记
+        DropIfStill(rid, rd); 
         return false;
     }
 
     auto fut = rd->promise.get_future();
-    if (fut.wait_for(std::chrono::seconds(timeout_sec)) == std::future_status::timeout)
-    {
-        DropIfStill(rid, rd); // 先摘表再返回：迟到回包此后只会扑空
-        return false;
-    }
+    fut.wait();
     rsp = fut.get();
-    return rsp != nullptr; // 断线清算给的 nullptr 也走这里
+    return rsp != nullptr; 
 }
 
 bool Requestor::Send(uint64_t conn_id, const std::string &wire, const std::string &rid,
@@ -95,7 +84,7 @@ bool Requestor::Send(uint64_t conn_id, const std::string &wire, const std::strin
 }
 
 bool Requestor::Send(uint64_t conn_id, const std::string &wire, const std::string &rid,
-                     const Callback &cb, int timeout_sec)
+                     const Callback &cb)
 {
     auto rd = Register(rid, Way::CALLBACK, cb);
     if (!rd)
@@ -105,26 +94,7 @@ bool Requestor::Send(uint64_t conn_id, const std::string &wire, const std::strin
         DropIfStill(rid, rd);
         return false;
     }
-
-    // 定时兜底：After 恰好执行一次后退役，任意线程可调；
-    // weak 捕获：Requestor 先于定时器到点死掉时，任务醒来扑空即散
-    uint64_t tid = ++_timer_seq;
-    std::weak_ptr<Requestor> wp = shared_from_this();
-    _net.After(tid, timeout_sec, [wp, rid]()
-               {
-                   if (auto s = wp.lock())
-                       s->Timeout(rid);
-               });
     return true;
-}
-
-void Requestor::Timeout(const std::string &rid)
-{
-    auto rd = GetAndDel(rid);
-    if (!rd)
-        return; // 已被回包兑现
-    Message::ptr nothing;
-    Fulfill(rd, nothing);
 }
 
 void Requestor::OnResponse(const std::string &rid, Message::ptr &msg)

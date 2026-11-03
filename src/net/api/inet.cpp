@@ -157,7 +157,8 @@ bool NetClient::Send(uint64_t conn_id, const std::string &data)
     if (conn_id != Id() || !_impl->_tcp)
         return false;
     auto c = _impl->_tcp->GetConn();
-    if (!c)
+    // 被动挂断（FIN/EOF）不会 reset _conn：只查非空会把包塞进尸块并谎报成功
+    if (!c || c->Dead())
         return false;
     c->Send(data.data(), data.size());
     return true;

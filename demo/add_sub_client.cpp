@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
     // 1) 同步链路
     RCode code;
     Json::Value result;
-    if (cli.Call("Add", AB(3, 4), 5, code, result))
+    if (cli.Call("Add", AB(3, 4), code, result))
         ILOG << "[sync] Add(3,4)=" << result.asInt() << " rcode=" << (int)code;
     else
         ILOG << "[sync] Add failed";
@@ -59,11 +59,10 @@ int main(int argc, char *argv[])
                      ILOG << "[callback] Add(100,23)=" << rsp->Result().asInt();
                  }
                  else
-                     ILOG << "[callback] failed (timeout/disconnect)";
+                     ILOG << "[callback] failed (disconnect)";
                  done = true;
                  cv.notify_one();
-             },
-             5);
+             });
     {
         std::unique_lock<std::mutex> lk(m);
         cv.wait_for(lk, std::chrono::seconds(5), [&] { return done; });

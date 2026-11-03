@@ -9,6 +9,9 @@ TcpClient::~TcpClient() { Shutdown(); }
 
 bool TcpClient::Connect()
 {
+    // 先 rendezvous loop 线程再干活：_loop_thread 构造即起线程，_loop 由线程函数稍后发布。
+    // 若 connect 失败早退，~LoopThread 可能读到 _loop==NULL 而跳过 Stop——join 永挂
+    EventLoop *loop = _loop_thread.GetLoop();
     Socket sock;
     if (!sock.Create())
         return false;
@@ -17,11 +20,9 @@ bool TcpClient::Connect()
     int fd = sock.Fd();
     sock.Detach(); // fd 所有权移交给 Connection
 
-    EventLoop *loop = _loop_thread.GetLoop();
     _conn.reset(new Connection(loop, 1, fd));
     _conn->SetConnectedCallback(_connected_callback);
     _conn->SetClosedCallback(_closed_callback);
-    // Buffer* 在 io loop 里拷成 string 才出门（与服务端同一 wrapping）
     _conn->SetMessageCallback([this](const PtrConnection &c, Buffer *buf)
                               {
                                   std::string data = buf->ReadStringAndPop(buf->ReadableSize());

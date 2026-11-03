@@ -61,7 +61,7 @@ target_include_directories(nexus_net PUBLIC src)
 target_compile_options(nexus_net PRIVATE -Wall -Wextra)
 target_link_libraries(nexus_net PUBLIC Threads::Threads)
 
-# 协议+RPC：INet 门面的唯一使用方（除 demo/测试）
+# 协议+RPC+注册中心：INet 门面的唯一使用方（除 demo/测试）
 add_library(nexus_rpc STATIC
     src/protocol/message.cpp
     src/protocol/protocol.cpp
@@ -70,6 +70,11 @@ add_library(nexus_rpc STATIC
     src/rpc/rpc_router.cpp
     src/rpc/rpc_server.cpp
     src/rpc/rpc_client.cpp
+    src/registry/registry_message.cpp
+    src/registry/registry_server.cpp
+    src/registry/registry_client.cpp
+    src/service/provider.cpp
+    src/service/consumer.cpp
 )
 target_compile_options(nexus_rpc PRIVATE -Wall -Wextra)
 target_link_libraries(nexus_rpc PUBLIC nexus_net jsoncpp_lib)
@@ -82,11 +87,15 @@ foreach(tgt buffer_test event_loop_test connection_test server_test)
     add_test(NAME ${tgt} COMMAND ${tgt})
 endforeach()
 
-foreach(tgt inet_test message_test requestor_test rpc_test)
+foreach(tgt inet_test message_test requestor_test rpc_test registry_test test_service)
     if(tgt STREQUAL "inet_test")
         set(src tests/net/inet_test.cpp)
     elseif(tgt STREQUAL "rpc_test")
         set(src tests/rpc/rpc_test.cpp)
+    elseif(tgt STREQUAL "registry_test")
+        set(src tests/registry/registry_test.cpp)
+    elseif(tgt STREQUAL "test_service")
+        set(src tests/service/test_service.cpp)
     else()
         set(src tests/protocol/${tgt}.cpp)
     endif()
@@ -106,3 +115,8 @@ add_executable(add_sub_server demo/add_sub_server.cpp)
 target_link_libraries(add_sub_server PRIVATE nexus_rpc)
 add_executable(add_sub_client demo/add_sub_client.cpp)
 target_link_libraries(add_sub_client PRIVATE nexus_rpc)
+
+foreach(demo registry_server_main provider_main consumer_main)
+    add_executable(${demo} demo/${demo}.cpp)
+    target_link_libraries(${demo} PRIVATE nexus_rpc)
+endforeach()
