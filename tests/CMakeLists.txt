@@ -33,3 +33,8 @@ add_executable(entry_test entry/entry_test.cpp)
 target_link_libraries(entry_test PRIVATE nexus_rpc GTest::gtest GTest::gtest_main)
 target_compile_options(entry_test PRIVATE -Wall -Wextra)
 add_test(NAME entry_test COMMAND entry_test)
+
+add_executable(sentinel_test sentinel/sentinel_test.cpp)
+target_link_libraries(sentinel_test PRIVATE nexus_rpc GTest::gtest GTest::gtest_main)
+target_compile_options(sentinel_test PRIVATE -Wall -Wextra)
+add_test(NAME sentinel_test COMMAND sentinel_test)
