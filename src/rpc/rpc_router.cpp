@@ -1,8 +1,20 @@
 #include "rpc/rpc_router.hpp"
+#include <chrono>
 #include "protocol/protocol.hpp"
+#include "sentinel/sentinel.hpp"
 
 namespace nexus {
 namespace rpc {
+
+namespace
+{
+int64_t NowMs()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+}
 
 bool ServiceDescribe::Check(VType vtype, const Json::Value &val)
 {
@@ -60,13 +72,32 @@ void RpcRouter::OnRpcRequest(INet &net, uint64_t conn_id, RpcRequest::ptr &reque
     {
         return Response(net, conn_id, request->Rid(), Json::Value(), RCode::RCODE_NOT_FOUND_SERVICE);
     }
+
+    // 闸门排在查表之后：查无此方法不是业务失败，不该扣任何人的额度
+    if (_gov)
+    {
+        int64_t wait = 0;
+        if (!_gov->Entry(method, NowMs(), wait))
+            return Response(net, conn_id, request->Rid(), Json::Value(), RCode::RCODE_LIMITED);
+    }
+
+    int64_t t0 = NowMs();
     if (!svc->ParamCheck(request->Params()))
     {
-        return Response(net, conn_id, request->Rid(), Json::Value(), RCode::RCODE_INVALID_PARAMS);
+        Response(net, conn_id, request->Rid(), Json::Value(), RCode::RCODE_INVALID_PARAMS);
+        // 参数违约是调用方的事：记成功账，不该拉低被调方熔断胜率
+        if (_gov)
+            _gov->Exit(method, true, 0, NowMs());
+        return;
     }
 
     Json::Value result;
-    if (!svc->Call(request->Params(), result))
+    bool ok = svc->Call(request->Params(), result);
+    // Entry 过了闸的请求必须 Exit
+    if (_gov)
+        _gov->Exit(method, ok, NowMs() - t0, NowMs());
+
+    if (!ok)
     {
         return Response(net, conn_id, request->Rid(), Json::Value(), RCode::RCODE_INTERNAL_ERROR);
     }

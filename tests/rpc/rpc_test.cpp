@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <thread>
@@ -8,6 +9,22 @@
 
 using namespace nexus;
 using namespace nexus::rpc;
+
+namespace
+{
+void WaitPort(int port)
+{
+    for (int i = 0; i < 100; i++)
+    {
+        Socket probe;
+        probe.Create();
+        if (probe.Connect((uint16_t)port, "127.0.0.1"))
+            return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    FAIL() << "server not ready";
+}
+}
 
 class TestServer
 {
@@ -22,7 +39,7 @@ public:
         _srv.RegisterService("Bad", {}, VType::INTEGRAL,
                              [](const Json::Value &, Json::Value &r) { r = "oops"; });
         _th = std::thread([this]() { _srv.Start(); });
-        WaitReady(port);
+        WaitPort(port);
     }
     ~TestServer()
     {
@@ -31,19 +48,6 @@ public:
     }
 
 private:
-    void WaitReady(int port)
-    {
-        for (int i = 0; i < 100; i++)
-        {
-            Socket probe;
-            probe.Create();
-            if (probe.Connect((uint16_t)port, "127.0.0.1"))
-                return;
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
-        FAIL() << "server not ready";
-    }
-
     RpcServer _srv;
     std::thread _th;
 };
@@ -172,4 +176,94 @@ TEST(Rpc, GarbageBytesKillConn)
     cli.Send(junk, strlen(junk)); // 前 4 字节当长度头是天文数字：BAD 帧
     char tmp[64];
     EXPECT_EQ(cli.Recv(tmp, sizeof(tmp)), 0); // 对端已关：EOF 为证
+}
+
+// 闸门排在查表与 handler 之间：限流拒掉的请求不碰业务，被拒的不记成交功账
+TEST(Rpc, GovernanceRejectsOverQuota)
+{
+    std::atomic<int> runs{0};
+    RpcServer srv(19857, NetOptions{0, 0, 0});
+    srv.RegisterService("Add", {{"a", VType::INTEGRAL}, {"b", VType::INTEGRAL}},
+                        VType::INTEGRAL,
+                        [&](const Json::Value &p, Json::Value &r)
+                        { r = p["a"].asInt() + p["b"].asInt(); runs++; });
+    Sentinel::LimiterCfg lmt;
+    lmt.enabled = true;
+    lmt.qps = 2;
+    srv.ConfigureGovernance("Add", lmt);
+    std::thread th([&srv] { srv.Start(); });
+    WaitPort(19857);
+
+    RawPeer c;
+    c.Connect(19857);
+    Json::Value p;
+    p["a"] = 1;
+    p["b"] = 2;
+    for (int i = 0; i < 4; i++)
+        c.SendRequest("Add", p, "rid-" + std::to_string(i));
+
+    std::string rid;
+    RCode code;
+    Json::Value result;
+    int passed = 0;
+    int limited = 0;
+    for (int i = 0; i < 4; i++)
+    {
+        ASSERT_TRUE(c.NextResponse(rid, code, result));
+        if (code == RCode::RCODE_OK)
+            passed++;
+        else if (code == RCode::RCODE_LIMITED)
+            limited++;
+    }
+    EXPECT_EQ(passed, 2);
+    EXPECT_EQ(limited, 2);
+    EXPECT_EQ(runs.load(), 2); // 拒掉的两个根本没进 handler
+
+    srv.Stop();
+    th.join();
+}
+
+TEST(Rpc, GovernanceBreakerTripsAndRecovers)
+{
+    std::atomic<int> poison{1}; // 1=handler 违约，0=正常
+    RpcServer srv(19858, NetOptions{0, 0, 0});
+    srv.RegisterService("Flaky", {}, VType::INTEGRAL,
+                        [&](const Json::Value &, Json::Value &r)
+                        { r = poison.load() ? Json::Value("oops") : Json::Value(1); });
+    Sentinel::BreakerCfg bkr;
+    bkr.enabled = true;
+    bkr.min_request = 2;
+    bkr.recovery_ms = 300;
+    srv.ConfigureGovernance("Flaky", Sentinel::LimiterCfg(), bkr);
+    std::thread th([&srv] { srv.Start(); });
+    WaitPort(19858);
+
+    RawPeer c;
+    c.Connect(19858);
+    auto Call = [&c](int i)
+    {
+        c.SendRequest("Flaky", Json::Value(Json::objectValue), "rid-" + std::to_string(i));
+        std::string rid;
+        RCode code;
+        Json::Value result;
+        EXPECT_TRUE(c.NextResponse(rid, code, result));
+        return code;
+    };
+
+    // 两单违约：失败率 100% 且样本够 min_request，开窗
+    EXPECT_EQ(Call(0), RCode::RCODE_INTERNAL_ERROR);
+    EXPECT_EQ(Call(1), RCode::RCODE_INTERNAL_ERROR);
+    EXPECT_EQ(Call(2), RCode::RCODE_LIMITED); // 开窗期间 handler 不再挨打
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(350));
+    EXPECT_EQ(Call(3), RCode::RCODE_INTERNAL_ERROR); // 半开发一张探测票：还是坏的，重开
+    EXPECT_EQ(Call(4), RCode::RCODE_LIMITED);
+
+    poison = 0;
+    std::this_thread::sleep_for(std::chrono::milliseconds(350));
+    EXPECT_EQ(Call(5), RCode::RCODE_OK); // 探测成功：清窗归闭
+    EXPECT_EQ(Call(6), RCode::RCODE_OK); // 后续全部照常放行
+
+    srv.Stop();
+    th.join();
 }

@@ -24,6 +24,7 @@ enum class RCode
     RCODE_INVALID_PARAMS,
     RCODE_NOT_FOUND_SERVICE,
     RCODE_INTERNAL_ERROR,
+    RCODE_LIMITED,
 };
 
 inline std::string ErrReason(RCode code)
@@ -37,6 +38,7 @@ inline std::string ErrReason(RCode code)
         {RCode::RCODE_INVALID_PARAMS, "invalid params"},
         {RCode::RCODE_NOT_FOUND_SERVICE, "service not found"},
         {RCode::RCODE_INTERNAL_ERROR, "internal error"},
+        {RCode::RCODE_LIMITED, "limited"},
     };
     auto it = err_map.find(code);
     return it == err_map.end() ? "unknown error" : it->second;

@@ -7,6 +7,7 @@ namespace rpc {
 RpcServer::RpcServer(int port, NetOptions opts)
     : _net((uint16_t)port, opts), _router(std::make_shared<RpcRouter>())
 {
+    _router->SetGovernance(&_gov);
     _pump.reset(new FramePump(
         _net,
         [this](uint64_t id, uint32_t mtype, const std::string &rid, const std::string &body)
@@ -18,6 +19,14 @@ void RpcServer::RegisterService(const std::string &method,
                                 VType return_type, const ServiceDescribe::ServiceCallback &handler)
 {
     _router->RegisterMethod(std::make_shared<ServiceDescribe>(method, desc, return_type, handler));
+}
+
+void RpcServer::ConfigureGovernance(const std::string &method, const Sentinel::LimiterCfg &lmt,
+                                    const Sentinel::BreakerCfg &bkr)
+{
+    Sentinel::LimiterCfg c = lmt;
+    c.queueing_ms = 0; // 服务端只判不排队：想排队是调用方的事
+    _gov.Configure(method, c, bkr);
 }
 
 void RpcServer::Start()

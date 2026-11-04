@@ -12,6 +12,9 @@
 #include "protocol/message.hpp"
 
 namespace nexus {
+
+class Sentinel;
+
 namespace rpc {
 
 // 参数/返回值类型描述，对应 jsoncpp 的 Value 类型族
@@ -57,6 +60,9 @@ public:
     using ptr = std::shared_ptr<RpcRouter>;
     void RegisterMethod(const ServiceDescribe::ptr &service);
 
+    // 挂治理闸门
+    void SetGovernance(Sentinel *gov) { _gov = gov; }
+
     void OnRpcRequest(INet &net, uint64_t conn_id, RpcRequest::ptr &request);
 
 private:
@@ -65,6 +71,7 @@ private:
 
     std::unordered_map<std::string, ServiceDescribe::ptr> _services;
     mutable std::shared_mutex _mutex;
+    Sentinel *_gov = nullptr;
 };
 
 } 
