@@ -1,5 +1,7 @@
 #include "entry/consumer.hpp"
 #include <algorithm>
+#include <chrono>
+#include <thread>
 
 namespace nexus {
 
@@ -46,9 +48,26 @@ void Consumer::OnPush(const std::string &service, const std::string &instance, b
         _names.erase(it);
 }
 
+void Consumer::ConfigureGovernance(const std::string &method, const Sentinel::LimiterCfg &lmt,
+                                   const Sentinel::BreakerCfg &bkr)
+{
+    _gov.Configure(method, lmt, bkr);
+}
+
 bool Consumer::Call(const std::string &method, const Json::Value &params,
                     RCode &code, Json::Value &result)
 {
+    // 调用方闸门
+    int64_t wait = 0;
+    if (!_gov.Entry(method, NowMs(), wait))
+    {
+        code = RCode::RCODE_LIMITED;
+        return true;
+    }
+    if (wait > 0)
+        std::this_thread::sleep_for(std::chrono::milliseconds(wait)); // 排队只许睡在这：自己的线程自己烧
+    int64_t t0 = NowMs();
+
     std::shared_ptr<rpc::RpcClient> cli;
     std::string inst;
     bool fresh = false;
@@ -90,19 +109,26 @@ bool Consumer::Call(const std::string &method, const Json::Value &params,
     for (auto &d : dropping)
         d->Stop();
     if (!cli)
+    {
+        _gov.Exit(method, false, 0, NowMs()); // 拨不出去也是失败样本：熔断靠它收手
         return false;
+    }
     if (fresh)
     {
         if (!cli->Connect())
         {
             std::lock_guard<std::mutex> lk(_mutex);
             _pool.erase(inst);
+            _gov.Exit(method, false, 0, NowMs());
             return false;
         }
         std::lock_guard<std::mutex> lk(_mutex);
         auto pit = _pool.find(inst);
         if (pit == _pool.end() || pit->second.cli != cli)
+        {
+            _gov.Exit(method, false, 0, NowMs());
             return false; // 连的期间被摘牌：cli 出作用域自灭
+        }
         pit->second.ready = true;
     }
     if (!cli->Call(method, params, code, result))
@@ -114,8 +140,12 @@ bool Consumer::Call(const std::string &method, const Json::Value &params,
                 _pool.erase(inst); // 断线实例就地摘牌；名单侧等 registry push 确认
         }
         cli->Stop(); // 锁外干：Stop 带 join
+        _gov.Exit(method, false, NowMs() - t0, NowMs());
         return false;
     }
+    // 服务端的 LIMITED 记失败
+    _gov.Exit(method, code == RCode::RCODE_OK || code == RCode::RCODE_INVALID_PARAMS,
+              NowMs() - t0, NowMs());
     return true;
 }
 

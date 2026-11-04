@@ -152,3 +152,60 @@ TEST(Entry, DeadProviderEvicted)
     c.Stop();
     p1.Stop();
 }
+
+// 治理从 Provider 入口配下去照样生效：第 2 发被服务端闸门拒，回执是 LIMITED 而不是超时
+TEST(Entry, ServerSideLimitViaProvider)
+{
+    LiveRegistry reg(19888);
+    reg.Start();
+    Provider p("calc", 19889, "127.0.0.1", 19888);
+    AddInto(p, 0);
+    Sentinel::LimiterCfg lmt;
+    lmt.enabled = true;
+    lmt.qps = 1;
+    p.ConfigureGovernance("Add", lmt);
+    p.Start();
+    Consumer c("127.0.0.1", 19888);
+    ASSERT_TRUE(c.Subscribe("calc"));
+    Json::Value prm;
+    prm["a"] = 6;
+    prm["b"] = 7;
+    RCode code;
+    Json::Value r;
+    ASSERT_TRUE(c.Call("Add", prm, code, r));
+    EXPECT_EQ(code, RCode::RCODE_OK);
+    ASSERT_TRUE(c.Call("Add", prm, code, r)); // 被拒不等于拨不通：照样有回执
+    EXPECT_EQ(code, RCode::RCODE_LIMITED);
+    c.Stop();
+    p.Stop();
+}
+
+// 调用方排队：qps=1 连拨两发，第二发被强制间隔约 1s——等待发生在客户端线程，网络照跑
+TEST(Entry, ConsumerQueuePacesCalls)
+{
+    LiveRegistry reg(19890);
+    reg.Start();
+    Provider p("calc", 19891, "127.0.0.1", 19890);
+    AddInto(p, 0);
+    p.Start();
+    Consumer c("127.0.0.1", 19890);
+    ASSERT_TRUE(c.Subscribe("calc"));
+    Sentinel::LimiterCfg lmt;
+    lmt.enabled = true;
+    lmt.qps = 1;
+    lmt.queueing_ms = 3000;
+    c.ConfigureGovernance("Add", lmt);
+    Json::Value prm;
+    prm["a"] = 6;
+    prm["b"] = 7;
+    RCode code;
+    Json::Value r;
+    ASSERT_TRUE(c.Call("Add", prm, code, r));
+    EXPECT_EQ(code, RCode::RCODE_OK);
+    auto t0 = steady_clock::now();
+    ASSERT_TRUE(c.Call("Add", prm, code, r));
+    EXPECT_EQ(code, RCode::RCODE_OK); // 排队而非拒绝：这待遇只有调用方配得起
+    EXPECT_GE(duration_cast<milliseconds>(steady_clock::now() - t0).count(), 800);
+    c.Stop();
+    p.Stop();
+}

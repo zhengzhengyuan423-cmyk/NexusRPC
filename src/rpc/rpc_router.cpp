@@ -1,20 +1,9 @@
 #include "rpc/rpc_router.hpp"
-#include <chrono>
 #include "protocol/protocol.hpp"
 #include "sentinel/sentinel.hpp"
 
 namespace nexus {
 namespace rpc {
-
-namespace
-{
-int64_t NowMs()
-{
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::steady_clock::now().time_since_epoch())
-        .count();
-}
-}
 
 bool ServiceDescribe::Check(VType vtype, const Json::Value &val)
 {

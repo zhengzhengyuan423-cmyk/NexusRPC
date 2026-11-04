@@ -26,6 +26,12 @@ void Provider::RegisterService(const std::string &method,
     _server.RegisterService(method, desc, return_type, handler);
 }
 
+void Provider::ConfigureGovernance(const std::string &method, const Sentinel::LimiterCfg &lmt,
+                                   const Sentinel::BreakerCfg &bkr)
+{
+    _server.ConfigureGovernance(method, lmt, bkr);
+}
+
 void Provider::Start()
 {
     _running = true;

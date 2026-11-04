@@ -1,4 +1,5 @@
 #pragma once
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -7,6 +8,14 @@
 #include "sentinel/rate_limiter.hpp"
 
 namespace nexus {
+
+// steady 毫秒：限流/熔断记账的统一时基，服务端与调用方共用
+inline int64_t NowMs()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
 
 class Sentinel
 {

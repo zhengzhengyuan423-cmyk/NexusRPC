@@ -22,6 +22,8 @@ public:
                          const std::vector<rpc::ServiceDescribe::ParamsDescribe> &desc,
                          rpc::VType return_type,
                          const rpc::ServiceDescribe::ServiceCallback &handler);
+    void ConfigureGovernance(const std::string &method, const Sentinel::LimiterCfg &lmt,
+                             const Sentinel::BreakerCfg &bkr = {});
     void Start(); // 起服务线程，连注册中心、登记，再开心跳线程
     void Stop();  // 幂等：只有第一次真正收摊
 
