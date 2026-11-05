@@ -1,6 +1,6 @@
 # Nexus
 
-C++17 实现的 reactor 网络库，上面架了 RPC、注册中心和流量治理（限流 / 熔断）。技术栈：C++17 / CMake / pthread / jsoncpp 
+C++11 实现的 reactor 网络库，上面架了 RPC、注册中心和流量治理（限流 / 熔断）。技术栈：C++11 / CMake / pthread / jsoncpp 
 
  52 个测试用例，全部通过。
 
