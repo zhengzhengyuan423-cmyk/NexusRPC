@@ -14,7 +14,7 @@ ctest --test-dir build
 
 ## 设计亮点
 
-**事件驱动的骨架。** epoll 边缘触发，一个 baseloop 管 accept 和定时器，一组 io 线程分管连接，业务 handler 交给 biz 线程池。连 Ctrl-C 都走事件回路：信号先屏蔽，signalfd 变成文件事件，loop 自己把自己叫醒，不需要管道自唤醒那套。biz 队列有界，塞满就丢并计数，不把反压传回 io。
+**事件驱动的骨架。** epoll 水平触发，一个 baseloop 管 accept 和定时器，一组 io 线程分管连接，业务 handler 交给 biz 线程池。连 Ctrl-C 都走事件回路：信号先屏蔽，signalfd 变成文件事件，loop 自己把自己叫醒，不需要管道自唤醒那套。biz 队列有界，塞满就丢并计数，不把反压传回 io。
 
 **手写的协议栈。** 4 字节长度头 + JSON 包体，rid 把请求和响应配平。FramePump 处理粘包拆包：字节进缓冲区，能成帧就成帧；帧头坏，连接就地处决。RPC 客户端三种形态共用同一套帧——阻塞式 Call、返回 `std::future` 的 Call、回调式 Call，in-flight 表按 rid 挂账，回包线程统一兑现。
 
